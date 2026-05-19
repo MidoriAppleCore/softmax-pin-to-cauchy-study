@@ -443,16 +443,9 @@ by case-splitting on β = 0 vs β ≠ 0.  The `γ`, `γ_zero`, `γ_hom`, and
 `flow_eq` fields are supplied by the explicit path + the theorems above.
 -/
 
--- Re-import the structures from Part 5.
--- (In practice: `import TransformersAreCauchyPoisson.Part5_GeodesicConjecture`)
--- For now we inline the definitions to keep this file self-contained.
-
--- The key result: once all sorries above are closed, this goes through
--- by `exact` + the two intertwining theorems.
-
 /-- **Assembly lemma.**  Given pointwise equalities for the VF (from the gap axiom),
-    construct `IsGeodesicGenerating`.  The only remaining work is in the `sorry`s
-    in §I.3 and §I.4 above.  -/
+    produce an explicit `γ` with `γ(0) = 1`, subgroup law, and Möbius intertwining.
+    Consumed by `GeodesicConjecture.axiom_implies_geodesic_generating` in Part 5.  -/
 lemma assemble_geodesic_generating
     {D : ℕ} (dq dy : Fin D) (α β : ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)

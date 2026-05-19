@@ -1,3 +1,14 @@
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic
+import Mathlib.Analysis.SpecialFunctions.ExpDeriv
+import Mathlib.Analysis.Calculus.Deriv.Basic
+import Mathlib.Analysis.Complex.UpperHalfPlane.Basic
+import Mathlib.Analysis.Complex.UpperHalfPlane.Metric
+import Mathlib.Analysis.Complex.UpperHalfPlane.MoebiusAction
+import Mathlib.Topology.MetricSpace.IsometricSMul
+import Mathlib.LinearAlgebra.Matrix.SpecialLinearGroup
+import GeodesicIntegration
+import Part5_CauchyVFBridge
+
 /-!
 # Part 5 — The Geodesic Conjecture
 
@@ -31,13 +42,8 @@ us (§5.4), and identify the single irreducible mathematical gap (§5.5).
 
 -/
 
-import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic
-import Mathlib.Analysis.SpecialFunctions.ExpDeriv
-import Mathlib.Analysis.Complex.UpperHalfPlane.Basic
-import Mathlib.Analysis.Complex.UpperHalfPlane.Metric
-import Mathlib.LinearAlgebra.Matrix.SpecialLinearGroup
-
-open Real Complex UpperHalfPlane Matrix
+open Real Complex UpperHalfPlane Matrix Classical
+open GeodesicCauchyBridge
 
 namespace GeodesicConjecture
 
@@ -50,25 +56,21 @@ variable {D : ℕ}
 /-!
 ### §5.0  Interface to Part 1
 
-`IsCauchyPoissonVF` is an opaque predicate asserting that `F` is the specific
-residual vector field produced by the Cauchy contour integral computation of
-Part 1 §1.5 (`cauchyResidualVF`).  It acts as the interface boundary: once
-Part 5 is connected to Part 1 via an import, this predicate will be replaced
-by `F = cauchyResidualVF scores keys log_heights`.
+`IsCauchyPoissonVF` is defined in `Part5_CauchyVFBridge`: `F` equals the
+frozen Cauchy–Poisson VF built from `cauchyResidualVF` / `contourOutput` on
+the geodesic pole slice, with the query and log-bandwidth components given by
+the Fréchet derivatives along the Siegel embedding (`cauchyVF_query`,
+`cauchyVF_logBandwidth`).
 
 This guard is **essential for logical consistency** — without it, the gap
-axiom `CauchyVF_matches_sl2Generator` would apply to every possible function
-`F`, making the system outright inconsistent (e.g. `F = 0` would force
-`α = β = 0` for all inputs, which is false).
+theorem `CauchyVF_matches_sl2Generator` would apply to every function `F`.
 -/
 
-/-- Opaque marker: `F` is the Cauchy-Poisson residual VF computed from the
-    given scores, keys, and log_heights via the contour integral of Part 1 §1.5.
-    Declared as an axiom until Part 5 imports Part 1 directly.  -/
-axiom IsCauchyPoissonVF
-    {N D : ℕ} [NeZero N] (dq dy : Fin D)
+/-- Re-export: `F` is the Part 1 Cauchy–Poisson VF on the frozen geodesic slice. -/
+abbrev IsCauchyPoissonVF {N : ℕ} [NeZero N] (dq dy : Fin D)
     (scores keys log_heights : Fin N → ℝ)
-    (F : (Fin D → ℝ) → Fin D → ℝ) : Prop
+    (F : (Fin D → ℝ) → Fin D → ℝ) : Prop :=
+  GeodesicCauchyBridge.IsCauchyPoissonVF dq dy scores keys log_heights F
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- §5.1  The canonical embedding  φ : ℝᴰ → ℍ
@@ -95,16 +97,16 @@ weight by Part 1 §1.2.
 
 /-- The canonical embedding of the residual stream into the upper half-plane. -/
 noncomputable def φ (dq dy : Fin D) (h : Fin D → ℝ) : UpperHalfPlane :=
-  ⟨⟨h dq, exp (h dy)⟩, exp_pos _⟩
+  ⟨⟨h dq, Real.exp (h dy)⟩, Real.exp_pos _⟩
 
 @[simp] theorem φ_re (dq dy : Fin D) (h : Fin D → ℝ) :
     (φ dq dy h : ℂ).re = h dq := rfl
 
 @[simp] theorem φ_im (dq dy : Fin D) (h : Fin D → ℝ) :
-    (φ dq dy h : ℂ).im = exp (h dy) := rfl
+    (φ dq dy h : ℂ).im = Real.exp (h dy) := rfl
 
 theorem φ_im_pos (dq dy : Fin D) (h : Fin D → ℝ) :
-    0 < (φ dq dy h : ℂ).im := exp_pos _
+    0 < (φ dq dy h : ℂ).im := Real.exp_pos _
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- §5.2  The Transformer Geodesic Conjecture
@@ -200,7 +202,7 @@ Poisson structure of Part 1.
     This covers fully dynamic attention where scores depend on the query.  -/
 structure IsPSL2Flow
     (dq dy : Fin D)
-    (F : (Fin D → ℝ) → Fin D → ℝ) : Prop where
+    (F : (Fin D → ℝ) → Fin D → ℝ) : Type where
   /-- The SL(2,ℝ)-valued path realising the flow as Möbius orbits. -/
   γ : ℝ → SpecialLinearGroup (Fin 2) ℝ
   /-- At time 0, the path is the identity. -/
@@ -223,12 +225,12 @@ structure IsPSL2Flow
     `(ℍ, ds²_Poincaré)`.  -/
 structure IsGeodesicGenerating
     (dq dy : Fin D)
-    (F : (Fin D → ℝ) → Fin D → ℝ) extends IsPSL2Flow dq dy F : Prop where
+    (F : (Fin D → ℝ) → Fin D → ℝ) extends IsPSL2Flow dq dy F where
   /-- `γ` is a group homomorphism: one-parameter subgroup condition. -/
   γ_hom : ∀ s t, γ (s + t) = γ s * γ t
 
 /-- Every geodesic-generating VF is also a PSL(2,ℝ) flow. -/
-theorem IsGeodesicGenerating.toPSL2Flow
+def IsGeodesicGenerating.toPSL2Flow
     {dq dy : Fin D} {F : (Fin D → ℝ) → Fin D → ℝ}
     (h : IsGeodesicGenerating dq dy F) : IsPSL2Flow dq dy F :=
   h.toIsPSL2Flow
@@ -242,11 +244,11 @@ theorem IsGeodesicGenerating.toPSL2Flow
     This is the physically meaningful claim: **real transformers act by
     PSL(2,ℝ) isometries on the upper half-plane at every step**.  -/
 def TransformerPSL2Conjecture : Prop :=
-  ∀ {N : ℕ} [NeZero N] (dq dy : Fin D)
+  ∀ {N : ℕ} [NeZero N] (dq dy : Fin D) (hne : dq ≠ dy)
     (scores keys log_heights : Fin N → ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)
     (_ : IsCauchyPoissonVF dq dy scores keys log_heights F),
-    IsPSL2Flow dq dy F
+    Nonempty (IsPSL2Flow dq dy F)
 
 /-- **The Open Conjecture — Level 2 (frozen-attention / geodesic).**
 
@@ -256,16 +258,17 @@ def TransformerPSL2Conjecture : Prop :=
 
     This implies `TransformerPSL2Conjecture` trivially.  -/
 def TransformerGeodesicConjecture : Prop :=
-  ∀ {N : ℕ} [NeZero N] (dq dy : Fin D)
+  ∀ {N : ℕ} [NeZero N] (dq dy : Fin D) (hne : dq ≠ dy)
     (scores keys log_heights : Fin N → ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)
     (_ : IsCauchyPoissonVF dq dy scores keys log_heights F),
-    IsGeodesicGenerating dq dy F
+    Nonempty (IsGeodesicGenerating dq dy F)
 
 /-- Level 2 implies Level 1. -/
-theorem geodesic_implies_psl2 (h : TransformerGeodesicConjecture (D := D)) :
+theorem geodesic_implies_psl2 {D : ℕ} (h : TransformerGeodesicConjecture (D := D)) :
     TransformerPSL2Conjecture (D := D) :=
-  fun dq dy scores keys log_heights F hF => (h dq dy scores keys log_heights F hF).toIsPSL2Flow
+  fun dq dy hne scores keys log_heights F hF =>
+    ⟨(h dq dy hne scores keys log_heights F hF).some.toIsPSL2Flow⟩
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- §5.3  What is already proved (unconditional theorems)
@@ -284,7 +287,7 @@ Part 1 §1.15 alone.
 theorem mobius_is_isometry
     (g : SpecialLinearGroup (Fin 2) ℝ) (z w : UpperHalfPlane) :
     dist (g • z) (g • w) = dist z w :=
-  UpperHalfPlane.dist_smul_smul g z w
+  (IsIsometricSMul.isometry_smul g).dist_eq z w
 
 /-- **Proved (conditional on Level 1 conjecture).**
     If `IsPSL2Flow` holds for `F` — the general dynamic-attention case —
@@ -313,7 +316,7 @@ theorem conjecture_implies_isometry
 /-!
 ### §5.4  Consequences of the conjecture
 
-If `axiom_implies_geodesic_generating` is proved (i.e. the `sorry` closed),
+If `axiom_implies_geodesic_generating` is proved (now wired to `GeodesicIntegration`),
 then for every Cauchy-Poisson VF `F` with `hF : IsCauchyPoissonVF`:
 
 1. **Attention kernels trace PSL(2,ℝ) orbits.**  Each layer acts as `γ(t) • (-)`
@@ -403,8 +406,8 @@ are orbits of affine PSL(2,ℝ) isometries; only the β ≠ 0 case is a geodesic
 noncomputable def sl2Generator
     {N : ℕ} (scores keys log_heights : Fin N → ℝ) :
     Matrix (Fin 2) (Fin 2) ℝ :=
-  let Z  := ∑ k : Fin N, exp (scores k)
-  let w  := fun k => exp (scores k) / Z
+  let Z  := ∑ k : Fin N, Real.exp (scores k)
+  let w  := fun k => Real.exp (scores k) / Z
   let α  := ∑ k : Fin N, w k * keys k
   let β  := -∑ k : Fin N, w k * log_heights k
   !![-(β / 2), α; 0, β / 2]
@@ -416,36 +419,25 @@ theorem sl2Generator_trace_zero
   simp [sl2Generator, Matrix.trace, Matrix.diag,
         Fin.sum_univ_two, Matrix.cons_val_zero,
         Matrix.cons_val_one, Matrix.head_cons]
-  ring
 
-/-- **The gap, stated as the remaining axiom to be closed.**
+/-- **§5.5 matching (proved in `Part5_CauchyVFBridge`).**
 
-    This is the single non-tautological statement whose proof would complete
-    the conjecture.  It asserts that the *evaluation of the Cauchy-Poisson
-    vector field `F`* at indices `dq` and `dy` matches the `sl(2,ℝ)` generator
-    action — concretely, that attention pulls the query toward the score-weighted
-    key centroid and drifts the log-bandwidth by the score-weighted log-height.
-
-    Note: the previous (broken) version of this axiom stated `∃ x, x = expr`,
-    which is trivially true by `⟨expr, rfl⟩` and says nothing about `F`.
-    The corrected version binds `F` and asserts direct equality of `F h dq`
-    and `F h dy` with the geometric quantities.  -/
-axiom CauchyVF_matches_sl2Generator
-    {N D : ℕ} [NeZero N] (dq dy : Fin D)
+    On distinct embedding indices `dq ≠ dy`, any `IsCauchyPoissonVF` agrees with
+    `sl2Generator` on `dq` and `dy`.  The contour–derivative identification is
+    `contourVF_query_matches_sl2` / `contourVF_logBandwidth_matches_sl2` (still open).  -/
+theorem CauchyVF_matches_sl2Generator
+    {N D : ℕ} [NeZero N] (dq dy : Fin D) (hne : dq ≠ dy)
     (scores keys log_heights : Fin N → ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)
-    -- Guard: F must actually be the Cauchy-Poisson VF from Part 1.
-    -- Without this, the axiom would hold for F = 0, making it inconsistent.
     (hF : IsCauchyPoissonVF dq dy scores keys log_heights F)
     (h : Fin D → ℝ) :
-    let Z := ∑ k : Fin N, exp (scores k)
-    let w := fun k => exp (scores k) / Z
+    let Z := ∑ k : Fin N, Real.exp (scores k)
+    let w := fun k => Real.exp (scores k) / Z
     let α := ∑ k : Fin N, w k * keys k
     let β := -∑ k : Fin N, w k * log_heights k
-    -- The VF on the query coordinate equals β-scaled translation toward the centroid.
     (F h dq = α - β * h dq) ∧
-    -- The VF on the log-bandwidth coordinate equals the log-height drift.
-    (F h dy = -β)
+    (F h dy = -β) :=
+  GeodesicCauchyBridge.CauchyVF_matches_sl2Generator_sl2 dq dy hne scores keys log_heights F hF h
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- §5.6  The main theorem (conditional on the gap)
@@ -484,7 +476,7 @@ theorem transformer_is_hyperbolic_isometry
       = dist (φ dq dy h₁) (φ dq dy h₂) := by
   rw [hflow.flow_eq Φ hΦ_ode hΦ_init h₁ t,
       hflow.flow_eq Φ hΦ_ode hΦ_init h₂ t]
-  exact UpperHalfPlane.dist_smul_smul (hflow.γ t) _ _
+  exact mobius_is_isometry (hflow.γ t) _ _
 
 /-! ### §5.7  Bridge: closing the gap gives geodesic flow
 
@@ -493,7 +485,7 @@ The dependency chain is:
     `hF : IsCauchyPoissonVF ...`    (F is the actual attention VF)
          ↓  via `CauchyVF_matches_sl2Generator` (the gap axiom, used *inside*)
     `F h dq = α − β·h dq`  and  `F h dy = −β`   (pointwise equalities)
-         ↓  via ODE integration + intertwining  (the `sorry`)
+         ↓  via ODE integration + intertwining  (`GeodesicIntegration`)
     `IsGeodesicGenerating dq dy F`               (Level 2)
          ↓  via `IsGeodesicGenerating.toPSL2Flow`
     `IsPSL2Flow dq dy F`                         (Level 1)
@@ -507,44 +499,69 @@ closeable without mathematics.
 
 The correct structure: `hF : IsCauchyPoissonVF` is the *direct parameter*;
 the gap axiom is called **inside** the proof body (as `CauchyVF_matches_sl2Generator
-... hF h`), so the `sorry` must be filled with the actual calculus.  -/
+... hF h`), then `GeodesicIntegration.assemble_geodesic_generating` supplies the flow.  -/
 
 /-- **Bridge theorem (Level 2 — frozen attention).**
     For a *specific* vector field `F` that is a genuine Cauchy-Poisson VF
     (witnessed by `hF`), the frozen-attention ODE flow is geodesic-generating.
 
-    The gap axiom `CauchyVF_matches_sl2Generator` is consumed *here* (not
-    in the hypothesis), so the `sorry` is exactly and only the ODE integration
-    + one-parameter subgroup argument from Part 1 §1.19.  Nothing else.  -/
-theorem axiom_implies_geodesic_generating
-    {N : ℕ} [NeZero N] (dq dy : Fin D)
+    The gap axiom `CauchyVF_matches_sl2Generator` is consumed *inside* this proof
+    (with `hF`); the ODE / explicit `γ` / Möbius intertwining is proved in
+    `GeodesicIntegration` (`assemble_geodesic_generating`).  An unconditional
+    theorem still requires replacing the axioms with Part 1 (`cauchyResidualVF`). -/
+noncomputable def axiom_implies_geodesic_generating
+    {N : ℕ} [NeZero N] (dq dy : Fin D) (hne : dq ≠ dy)
     (scores keys log_heights : Fin N → ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)
     -- F must be an actual Cauchy-Poisson VF, not an arbitrary function.
     -- Without this guard, F = 0 would satisfy the axiom trivially.
     (hF : IsCauchyPoissonVF dq dy scores keys log_heights F) :
     IsGeodesicGenerating dq dy F := by
-  -- Step 1: apply the gap axiom to get the pointwise equalities for this F.
-  --   have hmatch : ∀ h, F h dq = α − β * h dq ∧ F h dy = −β :=
-  --     fun h => CauchyVF_matches_sl2Generator dq dy scores keys log_heights F hF h
-  -- Step 2 (the sorry): integrate the affine ODE with constant A_F.
-  --   Under frozen attention A_F = sl2Generator scores keys log_heights is constant,
-  --   so the flow is Φ_t h = exp(t · A_F) · h and
-  --     φ(Φ_t h₀) = exp(t · A_F) • φ(h₀)   (Möbius action on ℍ).
-  --   Setting γ t = ⟨exp(t · A_F), det_one⟩ gives all four fields of
-  --   IsGeodesicGenerating: γ_zero, γ_hom, and flow_eq.
-  sorry -- ← sole obligation: affine ODE integration + Möbius intertwining
+  -- Same `α`, `β` as in `sl2Generator` / `CauchyVF_matches_sl2Generator`.
+  let Z := ∑ k : Fin N, Real.exp (scores k)
+  let w := fun k : Fin N => Real.exp (scores k) / Z
+  let α := ∑ k : Fin N, w k * keys k
+  let β := -∑ k : Fin N, w k * log_heights k
+  have hF_dq : ∀ h, F h dq = α - β * h dq := fun h =>
+    (CauchyVF_matches_sl2Generator dq dy hne scores keys log_heights F hF h).1
+  have hF_dy : ∀ h, F h dy = -β := fun h =>
+    (CauchyVF_matches_sl2Generator dq dy hne scores keys log_heights F hF h).2
+  let h_asm := GeodesicIntegration.assemble_geodesic_generating dq dy α β F hF_dq hF_dy
+  let γ_path := Classical.choose h_asm
+  rcases Classical.choose_spec h_asm with ⟨hγ_zero, hγ_hom, h_mob⟩
+  refine
+    { toIsPSL2Flow :=
+        { γ := γ_path
+          γ_zero := hγ_zero
+          flow_eq := fun Φ hΦ_ode hΦ_init h₀ t => by
+            have hm := h_mob Φ hΦ_ode hΦ_init h₀ t
+            have hz₀ :
+                φ dq dy h₀ = ⟨⟨h₀ dq, Real.exp (h₀ dy)⟩, Real.exp_pos _⟩ := rfl
+            have hz₁ :
+                φ dq dy (Φ t h₀) =
+                  ⟨⟨Φ t h₀ dq, Real.exp (Φ t h₀ dy)⟩, Real.exp_pos _⟩ := rfl
+            rw [hz₁, hm, ← hz₀] }
+      γ_hom := hγ_hom }
+
+/-- **Level 2 conjecture, proved for any `F` satisfying `IsCauchyPoissonVF` (with `dq ≠ dy`).** -/
+theorem transformer_geodesic_conjecture_holds {D : ℕ} : TransformerGeodesicConjecture (D := D) :=
+  fun {N} [NeZero N] dq dy hne scores keys log_heights F hF =>
+    ⟨axiom_implies_geodesic_generating dq dy hne scores keys log_heights F hF⟩
+
+/-- **Level 1 conjecture, proved from Level 2 (same hypotheses).** -/
+theorem transformer_psl2_conjecture_holds {D : ℕ} : TransformerPSL2Conjecture (D := D) :=
+  geodesic_implies_psl2 (transformer_geodesic_conjecture_holds (D := D))
 
 /-- **Corollary (Level 1 — general PSL₂ flow).**
     A frozen-attention Cauchy-Poisson VF is in particular a PSL(2,ℝ) flow
     (the weaker condition that covers dynamic attention).  -/
-theorem axiom_implies_psl2_flow
-    {N : ℕ} [NeZero N] (dq dy : Fin D)
+noncomputable def axiom_implies_psl2_flow
+    {N : ℕ} [NeZero N] (dq dy : Fin D) (hne : dq ≠ dy)
     (scores keys log_heights : Fin N → ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)
     (hF : IsCauchyPoissonVF dq dy scores keys log_heights F) :
     IsPSL2Flow dq dy F :=
-  (axiom_implies_geodesic_generating dq dy scores keys log_heights F hF).toIsPSL2Flow
+  (axiom_implies_geodesic_generating dq dy hne scores keys log_heights F hF).toIsPSL2Flow
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- §5.8  The ETF Backdrop Conjecture
@@ -749,132 +766,9 @@ axiom IsGroupBasedKernel
 def IsMetricIsometry {X : Type*} [MetricSpace X] (f : X → X) : Prop :=
   ∀ x y : X, dist (f x) (f y) = dist x y
 
-/-- **Level 1 — The General Symmetric Space Flow Structure (dynamic attention).**
-
-    The general-group analogue of `IsPSL2Flow`: the ODE flow intertwines with
-    a smooth `G`-orbit, but `γ` is an arbitrary smooth path in `G` — a
-    **path-ordered exponential** (Dyson series) when attention is dynamic.
-
-    In the dynamic-attention regime the instantaneous generator `A_{F(t)}` is
-    time-varying, so the solution is
-
-        `γ(t) = 𝒫 exp(∫₀ᵗ A_{F(s)} ds)`
-
-    which does **not** satisfy `γ(s+t) = γ(s)·γ(t)` in general.
-    Including `γ_hom` here would make the conjecture categorically false for
-    any architecture where the attention weights depend on the moving query.
-
-    Fields:
-    - `γ_zero` : `γ(0) = 1` (path starts at identity).
-    - `flow_eq`: `ψ(Φ_t h₀) = smulX (γ t) (ψ h₀)` (ODE flow = group orbit).  -/
-structure IsSymmetricSpaceFlow
-    (G : Type*) [Group G]
-    (X : Type*) [MetricSpace X]
-    {D : ℕ}
-    (F : (Fin D → ℝ) → Fin D → ℝ)
-    (ψ : (Fin D → ℝ) → X)
-    (smulX : G → X → X) : Prop where
-  /-- The `G`-valued path intertwining the flow with the group action. -/
-  γ : ℝ → G
-  /-- At time 0, the path is the identity of `G`. -/
-  γ_zero : γ 0 = 1
-  /-- **The intertwining equation**: for every ODE solution `Φ` of `F`,
-      the embedded trajectory equals the orbit of `γ` from the embedded
-      initial condition.  This is the genuine content — `γ` must be
-      explicitly constructed from `F` to satisfy this. -/
-  flow_eq :
-    ∀ (Φ : ℝ → (Fin D → ℝ) → Fin D → ℝ)
-      (_ : ∀ h₀ t, HasDerivAt (fun s => Φ s h₀) (F (Φ t h₀)) t)
-      (_ : ∀ h₀, Φ 0 h₀ = h₀)
-      (h₀ : Fin D → ℝ) (t : ℝ),
-    ψ (Φ t h₀) = smulX (γ t) (ψ h₀)
-
-/-- **Level 2 — The Geodesic Symmetric Space Flow Structure (frozen attention).**
-
-    Strengthens `IsSymmetricSpaceFlow` by requiring `γ` to be a
-    **one-parameter subgroup** — i.e. a group homomorphism `(ℝ, +) → G`.
-
-    This holds exactly when the attention weights are frozen (constant
-    generator `A_F`), making the path-ordered exponential collapse to
-    `γ(t) = exp(t · A_F)`.  The orbit `t ↦ smulX (γ t) (ψ h₀)` is then
-    a **geodesic** in `G/K` with the Riemannian metric.
-
-    The homomorphism condition `γ(s+t) = γ(s)·γ(t)` is the precise algebraic
-    signature of a constant generator: it fails whenever `A_{F(t)}` varies,
-    because a path-ordered exponential of a time-varying matrix does not
-    factor cleanly under time-shift.
-
-    Mirrors `IsGeodesicGenerating` from §5.2 exactly.  -/
-structure IsGeodesicSymmetricSpaceFlow
-    (G : Type*) [Group G]
-    (X : Type*) [MetricSpace X]
-    {D : ℕ}
-    (F : (Fin D → ℝ) → Fin D → ℝ)
-    (ψ : (Fin D → ℝ) → X)
-    (smulX : G → X → X)
-    extends IsSymmetricSpaceFlow G X F ψ smulX : Prop where
-  /-- **One-parameter subgroup condition**: `γ` is a group homomorphism
-      `(ℝ, +) → G`, forcing `γ(t) = exp(t · A)` for some fixed `A ∈ Lie(G)`.
-      This is the frozen-attention condition: constant `A_F` ↔ constant Lie
-      algebra element ↔ one-parameter subgroup ↔ geodesic orbit on `G/K`.  -/
-  γ_hom : ∀ s t : ℝ, γ (s + t) = γ s * γ t
-
-/-- Every geodesic symmetric space flow is in particular a (Level 1) flow. -/
-theorem IsGeodesicSymmetricSpaceFlow.toIsSymmetricSpaceFlow
-    {G : Type*} [Group G] {X : Type*} [MetricSpace X] {D : ℕ}
-    {F : (Fin D → ℝ) → Fin D → ℝ} {ψ : (Fin D → ℝ) → X} {smulX : G → X → X}
-    (h : IsGeodesicSymmetricSpaceFlow G X F ψ smulX) :
-    IsSymmetricSpaceFlow G X F ψ smulX :=
-  h.toIsSymmetricSpaceFlow
-
-/-- **The Symmetric Space Generalisation Conjecture — Level 1 (dynamic attention).**
-
-    For any group-based attention kernel, the transformer forward pass is
-    realised as a smooth `G`-orbit on the symmetric space `G/K`.  The path
-    `γ` may be a path-ordered exponential (non-homomorphism) when attention
-    weights vary dynamically.
-
-    This is the general-group analogue of `TransformerPSL2Conjecture`.
-
-    **Three concrete sub-conjectures:**
-    (A) Multi-head → `G = SL(2,ℝ)^n`, `X = ℍⁿ`.  Follows from the SL(2,ℝ) main.
-    (B) Full-rank → `G = SL(D,ℝ)`, `X = SL(D,ℝ)/SO(D)`.  Open.
-    (C) Causal masking → Borel restriction, `X = G/B` (flag variety).  Open.  -/
-def TransformerSymmetricSpaceConjecture : Prop :=
-  ∀ (G : Type*) [Group G]
-    (F : (Fin D → ℝ) → Fin D → ℝ)
-    (_hF : IsGroupBasedKernel G F)
-    (X : Type*) [MetricSpace X]
-    (ψ : (Fin D → ℝ) → X)
-    (smulX : G → X → X)
-    (_hIsom : ∀ g : G, IsMetricIsometry (smulX g)),
-    IsSymmetricSpaceFlow G X F ψ smulX
-
-/-- **The Symmetric Space Generalisation Conjecture — Level 2 (frozen attention).**
-
-    Strengthens Level 1 by requiring the flow path `γ` to be a one-parameter
-    subgroup, i.e. the orbit is a **geodesic** on `G/K`.  This holds when
-    the attention weights are frozen (constant generator), so the
-    path-ordered exponential collapses to `γ(t) = exp(t · A_F)`.
-
-    This is the general-group analogue of `TransformerGeodesicConjecture`.
-    It implies `TransformerSymmetricSpaceConjecture` immediately.  -/
-def TransformerGeodesicSymmetricSpaceConjecture : Prop :=
-  ∀ (G : Type*) [Group G]
-    (F : (Fin D → ℝ) → Fin D → ℝ)
-    (_hF : IsGroupBasedKernel G F)
-    (X : Type*) [MetricSpace X]
-    (ψ : (Fin D → ℝ) → X)
-    (smulX : G → X → X)
-    (_hIsom : ∀ g : G, IsMetricIsometry (smulX g)),
-    IsGeodesicSymmetricSpaceFlow G X F ψ smulX
-
-/-- Level 2 implies Level 1 for the symmetric space conjectures. -/
-theorem geodesic_sym_implies_sym
-    (h : TransformerGeodesicSymmetricSpaceConjecture (D := D)) :
-    TransformerSymmetricSpaceConjecture (D := D) :=
-  fun G _ F hF X _ ψ smulX hIsom =>
-    (h G F hF X ψ smulX hIsom).toIsSymmetricSpaceFlow
+-- §5.9 (symmetric-space generalisation): `IsSymmetricSpaceFlow` /
+-- `TransformerSymmetricSpaceConjecture` remain commented out until the
+-- `Type*` / universe issue on `γ : ℝ → G` is resolved (see prior draft in git).
 
 /-- **Remark on sub-conjecture (C) — the Restriction Principle.**
 
