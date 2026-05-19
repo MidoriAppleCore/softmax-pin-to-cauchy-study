@@ -31,6 +31,12 @@ name = "Part5_ContourDecomposition"
 [[lean_lib]]
 name = "Part5_SL2Covariance"
 
+[[lean_lib]]
+name = "Part5_WitnessConstruction"
+
+[[lean_lib]]
+name = "Part5_ComovingEuler"
+
 [[lean_exe]]
 name = "transformers"
 root = "Main"

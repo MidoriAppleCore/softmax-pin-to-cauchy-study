@@ -345,56 +345,54 @@ then for every Cauchy-Poisson VF `F` with `hF : IsCauchyPoissonVF`:
 -- ═══════════════════════════════════════════════════════════════════════
 
 /-!
-### §5.5  The single irreducible mathematical gap
+### §5.5  The gap — proved and honest
 
-Resolving `TransformerGeodesicConjecture` reduces to **one computation**
-that is not yet formalised:
+**`TransformerGeodesicConjecture` (Level 2) and `TransformerPSL2Conjecture` (Level 1)
+are both proved in §5.6–5.7 of this file.**
 
-> **Gap**: Given the Cauchy-Poisson linear operator `T`, define the
-> `sl(2,ℝ)` element
->
->     `A_F = [[-β/2,   α],`
->            `[    0,  β/2]]`
->
-> where
->     `α = Σ_k w_k · ξ_k`    (score-weighted centroid of keys),
->     `β = -Σ_k w_k · log y_k`  (negative log-weighted pole height),
->
-> and verify (by the Möbius derivative formula `dz/dt = A_F • z` at `t=0`):
->
->     `T(h)[dq] = α - β · h[dq]`     (β-scaled pull toward centroid),
->     `T(h)[dy] = -β`.                (log-bandwidth drift).
->
-> This is an explicit calculation on `contourOutput` from Part 1 §1.5.
+The proof chain is:
 
-Once this computation is verified, the chain closes:
+    `hF : IsCauchyPoissonVF dq dy scores keys log_heights F`
+         ↓  `CauchyVF_matches_sl2Generator` (proved in `Part5_CauchyVFBridge`, by `rfl`)
+    `∀ h, F h dq = α − β·h dq`  and  `∀ h, F h dy = −β`
+         ↓  `GeodesicIntegration.assemble_geodesic_generating` (proved, no sorry)
+    `IsGeodesicGenerating dq dy F`   (Level 2 — one-parameter subgroup orbit)
+         ↓  `.toIsPSL2Flow`
+    `IsPSL2Flow dq dy F`             (Level 1 — Möbius isometry at every step)
 
-    `T = ι(A_F)`  →  `exp(t·T) = ι(exp(t·A_F))`
-                   →  `φ(Φ_t h₀) = exp(t·A_F) • φ(h₀)`
-                   →  orbit of a one-parameter subgroup of PSL(2,ℝ) in ℍ.
+**Why the computation is trivial.**  `IsCauchyPoissonVF` is DEFINED as
+`∀ h d, F h d = cauchyPoissonVF dq dy scores keys log_heights h d`, and
+`cauchyPoissonVF` at `dq` is DEFINED as `cauchyVF_query = α − β·q`.
+So `CauchyVF_matches_sl2Generator` reduces to `rfl` — the sl(2) identity
+is baked into the definition of `IsCauchyPoissonVF`.
+
+**The honest remaining obligation.**  The conjecture is proved *for any F
+that satisfies `IsCauchyPoissonVF`*.  The open problem is:
+
+> **Gap**: Construct an `IsCauchyPoissonVF` witness from the actual
+> transformer's `cauchyResidualVF` / `contourOutput` (Part 1 §1.5/§1.17).
+
+This requires showing:
+
+    `∑_k P'_q(x_k(t), y_k(t), q(t)) = α − β·q`
+
+under the co-moving sl(2,ℝ) flow (where poles and query evolve together).
+The co-moving form IS provable — it is `Part5_SL2Covariance.poisson_sum_sl2_covariance`.
+The frozen-pole form is provably FALSE: `∑_k P'_q` is a bounded rational function
+while `α − β·q` is unbounded linear; see `not_FarFieldCentroidTarget_demo`.
 
 **Geodesics vs. horocycles — the β ≠ 0 condition.**
 
-The last arrow does NOT always produce a geodesic.  The orbit type depends
-on the eigenvalues of `A_F`, which are `±β/2`:
+The orbit type depends on the eigenvalues of `A_F = !![−β/2, α; 0, β/2]`:
 
-* **β ≠ 0** (distinct real eigenvalues): `A_F` is a *hyperbolic* element of
-  `sl(2,ℝ)`.  The orbit `t ↦ exp(t·A_F) • z₀` is a **true geodesic** in
-  `(ℍ, ds²_Poincaré)` — a semicircle orthogonal to the real axis.
+* **β ≠ 0** (distinct real eigenvalues): `A_F` is *hyperbolic*.  The orbit
+  `t ↦ exp(t·A_F) • z₀` is a **true geodesic** in `(ℍ, ds²_Poincaré)`.
 
-* **β = 0** (repeated zero eigenvalue, nilpotent): `A_F` is a *parabolic*
-  element.  The orbit is horizontal translation `z ↦ z + tα`, whose image
-  in ℍ is a **horocycle** (a horizontal line `y = const`) — *not* a geodesic.
+* **β = 0** (nilpotent): `A_F` is *parabolic*.  The orbit is horizontal
+  translation — a **horocycle**, not a geodesic.
 
-The condition `β = 0` means the score-weighted log-pole-heights sum to zero,
-i.e. the attention bandwidth is perfectly static.  In practice this is a
-degenerate edge case; for any non-trivial attention distribution with varying
-pole heights, `β ≠ 0` and the flow is a true geodesic.
-
-The conjecture is therefore most precisely stated as: *"Transformers act via
-geodesic flow when β ≠ 0 (attention bandwidth actively updates), and degenerate
-into horocycle flow when β = 0 (attention bandwidth is static)."*  Both cases
-are orbits of affine PSL(2,ℝ) isometries; only the β ≠ 0 case is a geodesic.
+Both cases are proved: `intertwining_hyp` (β ≠ 0) and `intertwining_par` (β = 0)
+in `GeodesicIntegration`.
 -/
 
 /-- The `sl(2,ℝ)` generator for a Cauchy-Poisson attention block.
@@ -483,38 +481,47 @@ theorem transformer_is_hyperbolic_isometry
 The dependency chain is:
 
     `hF : IsCauchyPoissonVF ...`    (F is the actual attention VF)
-         ↓  via `CauchyVF_matches_sl2Generator` (the gap axiom, used *inside*)
+         ↓  via `CauchyVF_matches_sl2Generator` (proved in `Part5_CauchyVFBridge`, by `rfl`)
     `F h dq = α − β·h dq`  and  `F h dy = −β`   (pointwise equalities)
-         ↓  via ODE integration + intertwining  (`GeodesicIntegration`)
+         ↓  via ODE integration + Möbius intertwining  (`GeodesicIntegration`)
     `IsGeodesicGenerating dq dy F`               (Level 2)
          ↓  via `IsGeodesicGenerating.toPSL2Flow`
     `IsPSL2Flow dq dy F`                         (Level 1)
 
-**Why earlier versions were broken.**  The previous bridge theorems took
-`∀ F, CauchyVF_matches_sl2Generator ...` as a *premise*.  But since
-`CauchyVF_matches_sl2Generator` is a Lean `axiom`, Lean accepts any call
-to it unconditionally — the premise was trivially satisfiable by applying
-the axiom directly, making the hypothesis vacuously true and the `sorry`
-closeable without mathematics.
+**All links in this chain are proved with zero sorry.**
 
-The correct structure: `hF : IsCauchyPoissonVF` is the *direct parameter*;
-the gap axiom is called **inside** the proof body (as `CauchyVF_matches_sl2Generator
-... hF h`), then `GeodesicIntegration.assemble_geodesic_generating` supplies the flow.  -/
+`CauchyVF_matches_sl2Generator` is proved — not an axiom — because
+`cauchyVF_query` is *defined* as `α − β·q`, making the match a `rfl`.
+
+`GeodesicIntegration.assemble_geodesic_generating` is proved: it case-splits
+on `β = 0` (parabolic, `intertwining_par`) vs `β ≠ 0` (hyperbolic,
+`intertwining_hyp`) and supplies the explicit `γ`, group law, and intertwining.
+
+**What remains open.**  The theorems below prove the conjecture for any `F`
+satisfying `IsCauchyPoissonVF`.  Constructing an `IsCauchyPoissonVF` witness
+from actual `cauchyResidualVF` / `contourOutput` (Part 1) requires the
+co-moving sl(2,ℝ) identity of `Part5_SL2Covariance` — the frozen-pole version
+is provably false (`not_FarFieldCentroidTarget_demo`).  -/
 
 /-- **Bridge theorem (Level 2 — frozen attention).**
-    For a *specific* vector field `F` that is a genuine Cauchy-Poisson VF
-    (witnessed by `hF`), the frozen-attention ODE flow is geodesic-generating.
+    For a specific vector field `F` satisfying `IsCauchyPoissonVF`, the ODE
+    flow is geodesic-generating.
 
-    The gap axiom `CauchyVF_matches_sl2Generator` is consumed *inside* this proof
-    (with `hF`); the ODE / explicit `γ` / Möbius intertwining is proved in
-    `GeodesicIntegration` (`assemble_geodesic_generating`).  An unconditional
-    theorem still requires replacing the axioms with Part 1 (`cauchyResidualVF`). -/
+    **Proof:**  `CauchyVF_matches_sl2Generator` (proved, not an axiom — it reduces
+    to `rfl` because `cauchyVF_query` is defined as `α − β·q`) supplies the pointwise
+    equalities.  `GeodesicIntegration.assemble_geodesic_generating` then produces the
+    explicit SL(2,ℝ) path `γ`, the group law, and the Möbius intertwining identity.
+
+    **What remains open.**  This is proved for any `F : IsCauchyPoissonVF`.
+    The open problem is constructing an `IsCauchyPoissonVF` witness from actual
+    transformer attention (`cauchyResidualVF` / `contourOutput` of Part 1) — which
+    requires the co-moving sl(2,ℝ) identity (`Part5_SL2Covariance`). -/
 noncomputable def axiom_implies_geodesic_generating
     {N : ℕ} [NeZero N] (dq dy : Fin D) (hne : dq ≠ dy)
     (scores keys log_heights : Fin N → ℝ)
     (F : (Fin D → ℝ) → Fin D → ℝ)
-    -- F must be an actual Cauchy-Poisson VF, not an arbitrary function.
-    -- Without this guard, F = 0 would satisfy the axiom trivially.
+    -- F must satisfy IsCauchyPoissonVF; without this guard, any F would work
+    -- since the ODE + intertwining proof only needs the two pointwise equalities.
     (hF : IsCauchyPoissonVF dq dy scores keys log_heights F) :
     IsGeodesicGenerating dq dy F := by
   -- Same `α`, `β` as in `sl2Generator` / `CauchyVF_matches_sl2Generator`.
