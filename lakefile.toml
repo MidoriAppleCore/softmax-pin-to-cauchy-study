@@ -37,6 +37,9 @@ name = "Part5_WitnessConstruction"
 [[lean_lib]]
 name = "Part5_ComovingEuler"
 
+[[lean_lib]]
+name = "Part5_DiscreteResidualBridge"
+
 [[lean_exe]]
 name = "transformers"
 root = "Main"
